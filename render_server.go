@@ -10,7 +10,6 @@ import (
 	"log"
 	"path/filepath"
 	"os/exec"
-	"time"
 	"os"
 )
 
@@ -49,7 +48,7 @@ func handleConnection(conn net.Conn) {
 				return
 			}
 			iresult := int(result)
-			file := data.ReceiveBlob(*reader, iresult)
+			file := data.ReceiveBlob(reader, iresult)
 
 			println("Result")
 			println("Given: " + strconv.Itoa(iresult))
@@ -60,9 +59,14 @@ func handleConnection(conn net.Conn) {
 				writer.WriteString("fail\n")
 				continue
 			}
+			writer.Flush()
+			date, err := reader.ReadString('\n')
+			if err != nil {
+				println("Invalid date!")
+			}
 
 			// Do thing and send PDF
-			f, err := createFromTemplate(file)
+			f, err := createFromTemplate(file, strings.Trim(date, "\n"))
 			ioutil.WriteFile("pre_send.pdf", f, 0644)
 			if err != nil {
 			}
@@ -80,7 +84,7 @@ func handleConnection(conn net.Conn) {
 	}
 }
 
-func createFromTemplate(input []byte) ([]byte, error) {
+func createFromTemplate(input []byte, time string) ([]byte, error) {
 	dir, err := ioutil.TempDir("", "preview")
 	if err != nil {
 		log.Fatal(err)
@@ -93,7 +97,7 @@ func createFromTemplate(input []byte) ([]byte, error) {
 
 	err = ioutil.WriteFile(tmplat, input, 0644)
 
-	command := exec.Command("xelatex", "-synctex=1", "-interaction=nonstopmode", "render.tex")
+	command := exec.Command("faketime", time, "xelatex", "-synctex=1", "-interaction=nonstopmode", "render.tex")
 	command.Dir = dir
 	out, err := command.CombinedOutput()
 	if err != nil {
@@ -101,7 +105,7 @@ func createFromTemplate(input []byte) ([]byte, error) {
 	}
 	outstr := string(out)
 	if strings.Contains(strings.ToLower(outstr), "rerun") {
-		command := exec.Command("xelatex", "-synctex=1", "-interaction=nonstopmode", "render.tex")
+		command := exec.Command("faketime", time, "xelatex", "-synctex=1", "-interaction=nonstopmode", "render.tex")
 		command.Dir = dir
 		command.Run()
 	}
